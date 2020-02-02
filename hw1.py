@@ -118,7 +118,26 @@ def reg_sse_func(X, Y, W, l, b_mat):
 def reg_sse_grad(X, Y, W, l, b_mat):
     """Compute the gradient of the regularized SSE w/ lambda `l`."""
     sse_gradient = sse_grad(X, Y, W, b_mat)
-    reg_term_gradient = 
+    reg_term_vec = W * l
+    reg_sse_gradient = sse_gradient + reg_term_vec
+    return reg_sse_gradient
+
+def reg_sse_grad_factory(l):
+    def _reg_sse_grad(X, Y, W, b_mat):
+        """Compute the gradient of the regularized SSE w/ lambda `l`."""
+        # sse_gradient = sse_grad(X, Y, W, b_mat)
+        # reg_term_vec = l * W
+        # reg_sse_gradient = sse_gradient + reg_term_vec
+        # print(f"{sse_gradient} +\n{reg_term_vec} =\n{reg_sse_gradient}")
+
+        regularization_mat = l * np.identity(len(W))
+        term_a = regularization_mat + np.dot(b_mat.T, b_mat)
+        term_a_inv = np.linalg.inv(term_a)
+        term_b = np.dot(b_mat.T, Y)
+        reg_sse_gradient = np.dot(term_a_inv, term_b)
+        return reg_sse_gradient 
+    return _reg_sse_grad
+
 
 ########################
 # OPTIMIZATION METHODS #
@@ -254,8 +273,9 @@ def newton_method(X, Y, M=2, mu=0.01, err_func=sse_func, err_grad_func=sse_grad,
     training_record = []
     i = 0
 
-    while converge_counter < 10 and i < 1500:
-        update = np.dot(lin_reg_hess_inv, err_grad_func(X, Y, W, b_mat))
+    while converge_counter < 10 and i < 100 and max(W) < 10**25:
+        error_gradient = err_grad_func(X, Y, W, b_mat)
+        update = np.dot(lin_reg_hess_inv, error_gradient)
         W = W - mu*update
         
         # Evaluate current weights
@@ -266,7 +286,7 @@ def newton_method(X, Y, M=2, mu=0.01, err_func=sse_func, err_grad_func=sse_grad,
             converge_counter += 1
         else:
             converge_counter = 0
-        # print(i, W, score, score_diff)
+        print(W, score)
 
         training_record.append((i, W, score))
         if record_fitting and i%5 == 0:
@@ -297,69 +317,143 @@ def newton_method(X, Y, M=2, mu=0.01, err_func=sse_func, err_grad_func=sse_grad,
         batch_converge_fig.savefig("./training_images/newton_covergence_plot.png")
     
     return W, score, i, training_record
+
+
+def newton_method_closed(X, Y, M=2, err_func=sse_func, err_grad_func=sse_grad, record_fitting=False):
+    W = np.zeros((M,))
+    b_mat = Phi_X = gen_basis_matrix(X, M)
+    lin_regress_hessian = np.matmul(Phi_X.T, Phi_X)
+    lin_reg_hess_inv = np.linalg.inv(lin_regress_hessian)
+
+    W = err_grad_func(X, Y, W, b_mat)
+        
+    # Evaluate current weights
+    score = err_func(X, Y, W, b_mat)
+    if record_fitting:
+        approx_vec = approximation(X, Y, W, b_mat)
+        rec_fig, rec_ax = plt.subplots(1,1)
+        rec_ax.scatter(X, Y, c='blue')
+        rec_ax.scatter(X, approx_vec, c='red', marker='x')
+        rec_fig.savefig(f"./training_images/newton_closed.png")
+        plt.close()
     
+    return W, score
 
     
 if __name__ == "__main__":
     M = 2  # Will train M features
     x_train, y_train, x_test, y_test = load_data(viz=False)
-    b_W, b_score, b_iters, b_record = batch_gradient_descent(x_train, y_train, M, 
-                                                            err_func=sse_func,
-                                                            err_grad_func=sse_grad,
-                                                            record_fitting=True)
-    s_W, s_score, s_iters, s_record = stoch_gradient_descent(x_train, y_train, M, 
-                                                            err_func=sse_func,
-                                                            err_grad_func=sse_grad,
-                                                            record_fitting=True)
-    n_W, n_score, n_iters, n_record = newton_method(x_train, y_train, M=2, mu=0.1,
-                                                    err_func=sse_func,
-                                                    err_grad_func=sse_grad,
-                                                    record_fitting=True)
+    # b_W, b_score, b_iters, b_record = batch_gradient_descent(x_train, y_train, M, 
+    #                                                         err_func=sse_func,
+    #                                                         err_grad_func=sse_grad,
+    #                                                         record_fitting=True)
+    # s_W, s_score, s_iters, s_record = stoch_gradient_descent(x_train, y_train, M, 
+    #                                                         err_func=sse_func,
+    #                                                         err_grad_func=sse_grad,
+    #                                                         record_fitting=True)
+    # n_W, n_score, n_iters, n_record = newton_method(x_train, y_train, M=2, mu=0.1,
+    #                                                 err_func=sse_func,
+    #                                                 err_grad_func=sse_grad,
+    #                                                 record_fitting=True)
 
-    print("Summary:")
-    print(f"Batch GD: Weights={b_W} | Final Score: {b_score} | Iters: {b_iters}")
-    print(f"Stochastic GD: Weights={s_W} | Final Score: {s_score} | Iters: {s_iters}")
-    print(f"Newton's Method: Weights={n_W} | Final Score: {n_score} | Iters: {n_iters}")
+    # print("Summary:")
+    # print(f"Batch GD: Weights={b_W} | Final Score: {b_score} | Iters: {b_iters}")
+    # print(f"Stochastic GD: Weights={s_W} | Final Score: {s_score} | Iters: {s_iters}")
+    # print(f"Newton's Method: Weights={n_W} | Final Score: {n_score} | Iters: {n_iters}")
 
-    converge_fig = plt.figure()
-    converge_ax = Axes3D(converge_fig)
-    for ri, record in enumerate([b_record, s_record, n_record]):
-        W0 = []
-        W1 = []
-        scores = []
+    # converge_fig = plt.figure()
+    # converge_ax = Axes3D(converge_fig)
+    # for ri, record in enumerate([b_record, s_record, n_record]):
+    #     W0 = []
+    #     W1 = []
+    #     scores = []
 
-        for r in record:
-            w0, w1 = r[1]
-            score = r[2]
-            W0.append(w0)
-            W1.append(w1)
-            scores.append(score)
-        cmap_str = {0: 'Blues',
-                    1: 'Greens',
-                    2: 'Reds'}[ri]
-        converge_ax.scatter(W0, W1, score, cmap=cmap_str, c=range(len(W0)))
-    converge_fig.savefig("./convergences.png")
+    #     for r in record:
+    #         w0, w1 = r[1]
+    #         score = r[2]
+    #         W0.append(w0)
+    #         W1.append(w1)
+    #         scores.append(score)
+    #     cmap_str = {0: 'Blues',
+    #                 1: 'Greens',
+    #                 2: 'Reds'}[ri]
+    #     converge_ax.scatter(W0, W1, score, cmap=cmap_str, c=range(len(W0)))
+    # converge_fig.savefig("./convergences.png")
 
-    weights_dict = {}
-    training_scores = []
-    for m in range(0, 10):
-        weights, score, i, training_record = newton_method(x_train, y_train, M=m+1, mu=0.1, err_func=rmse_func, err_grad_func=rmse_grad)
-        # weights, score, i, training_record = batch_gradient_descent(x_train, y_train, M=m+1, err_func=sse_func, err_grad_func=sse_grad, record_fitting=True)
-        weights_dict[m] = weights
-        training_scores.append(score)
-        print(score)
+    # weights_dict = {}
+    # training_scores = []
+    # for m in range(0, 10):
+    #     weights, score, i, training_record = newton_method(x_train, y_train, M=m+1, mu=0.1, err_func=rmse_func, err_grad_func=rmse_grad)
+    #     # weights, score, i, training_record = batch_gradient_descent(x_train, y_train, M=m+1, err_func=sse_func, err_grad_func=sse_grad, record_fitting=True)
+    #     weights_dict[m] = weights
+    #     training_scores.append(score)
+    #     print(score)
 
-    test_scores = []
-    for m in range(0, 10):
-        objective_score = rmse_func(x_test, y_test, weights_dict[m], gen_basis_matrix(x_test, M=m+1))
-        test_scores.append(objective_score)
-        print(objective_score)
+    # test_scores = []
+    # for m in range(0, 10):
+    #     objective_score = rmse_func(x_test, y_test, weights_dict[m], gen_basis_matrix(x_test, M=m+1))
+    #     test_scores.append(objective_score)
+    #     print(objective_score)
         
-    fig, ax = plt.subplots(1,1)
-    ax.plot(training_scores, label="Training", c="blue")
-    ax.scatter(range(0, 10), training_scores, c="blue")
-    ax.plot(test_scores, label="Test", c="red")
-    ax.scatter(range(0, 10), test_scores, c="red")
-    fig.legend(loc=(0.45, 0.75)) 
-    fig.savefig("./overfitting.png")
-    plt.close()
+    # fig, ax = plt.subplots(1,1)
+    # ax.plot(training_scores, label="Training", c="blue")
+    # ax.scatter(range(0, 10), training_scores, c="blue")
+    # ax.plot(test_scores, label="Test", c="red")
+    # ax.scatter(range(0, 10), test_scores, c="red")
+    # fig.legend(loc=(0.45, 0.75)) 
+    # fig.savefig("./overfitting.png")
+    # plt.close()
+
+    results_dict = {}
+    scores = []
+    for l_exp in range(-7, 1):
+        if l_exp == -7:
+            l = 0
+        else:
+            l = 10**l_exp
+        W, score = newton_method_closed(x_train, y_train, M=9,
+                                        err_func=rmse_func,
+                                        err_grad_func=reg_sse_grad_factory(l),
+                                        record_fitting=True)
+        scores.append(score)
+        results_dict[l] = (W, score)
+    
+    lambda_comp_fig, lambda_comp_ax = plt.subplots(1,1)
+    cmap = plt.cm.get_cmap('viridis', lut=8)
+    for i, l in enumerate(results_dict.keys()):
+        c = cmap(i)
+        W, score = results_dict[l]
+        approx_vec = approximation(x_train, y_train, W)
+        lambda_comp_ax.scatter(x_train, approx_vec, c=[c,], label=f"{l:1.0e}")
+    lambda_comp_ax.scatter(x_train, y_train, c='red')
+    lambda_comp_ax.set_title("Training Set Approximations")
+    lambda_comp_fig.legend(loc=(0.7, 0.5))
+
+    test_comp_fig, test_comp_ax = plt.subplots(1,1)
+    cmap = plt.cm.get_cmap('viridis', lut=8)
+    test_errors = []
+    for i, l in enumerate(results_dict.keys()):
+        W, train_score = results_dict[l]
+        test_approx_vec = approximation(x_test, y_test, W)
+        test_error = rmse_func(x_test, y_test, W, gen_basis_matrix(x_test, 9))
+        test_errors.append(test_error)
+
+        c = cmap(i)
+        test_comp_ax.scatter(x_test, test_approx_vec, c=[c,], label=f"{l:1.0e}")
+
+        print(f"Lambda={l:1.0e}: {train_score}, {test_error}")
+    test_comp_ax.scatter(x_test, y_test, c='red')
+    test_comp_fig.legend(loc=(0.7, 0.5))
+
+    fitting_error_fig, fitting_error_ax = plt.subplots(1,1)
+    fitting_error_ax.plot(list(map(lambda l: log(l, 10) if l != 0 else -7, results_dict.keys())), scores, c='red')
+    fitting_error_ax.plot(list(map(lambda l: log(l, 10) if l != 0 else -7, results_dict.keys())), test_errors, c='blue')
+    plt.show()
+
+
+
+
+
+
+
+
